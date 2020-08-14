@@ -6,7 +6,7 @@ from jax import random
 import time
 import sys
 
-from helpers import generate_ou_process, plot_ou_process
+
 
 # Generate key which is used to generate random numbers
 key = random.PRNGKey(1)
