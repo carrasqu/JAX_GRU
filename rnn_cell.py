@@ -23,8 +23,10 @@ from jax.experimental.stax import (BatchNorm, Conv, Dense, Flatten,
 def GRU(out_dim, W_init=glorot_normal(), b_init=normal()):
     def init_fun(rng, input_shape):
         """ Initialize the GRU layer for stax """
-        hidden = np.zeros((1, out_dim))
 
+        hidden = np.zeros((1, out_dim)) # initialization of the hidden state to zeros
+
+        # Initializing the RNN cell parameters
         k1, k2, k3 = random.split(rng, num=3)
         update_W, update_U, update_b = (
             W_init(k1, (input_shape[2], out_dim)),
@@ -43,7 +45,7 @@ def GRU(out_dim, W_init=glorot_normal(), b_init=normal()):
             W_init(k2, (out_dim, out_dim)),
             b_init(k3, (out_dim,)),)
         
-        #softmax parameters
+        #softmax output layer parameters
         k1, k2, k3 = random.split(rng, num=3) 
         sm_W, sm_b = (W_init(k1, (out_dim,input_shape[2])),b_init(k3, (input_shape[2],)),)
         
@@ -57,11 +59,13 @@ def GRU(out_dim, W_init=glorot_normal(), b_init=normal()):
              (update_W, update_U, update_b),
              (reset_W, reset_U, reset_b),
              (out_W, out_U, out_b),(sm_W, sm_b)),rng)
-    
+   
+    # This function samples the probability distribution given by the RNN 
     def sample(params,Nsi,Nq,key): 
         """ Sample all the conditionals parameterized by the rnn """
-        h = lax.stop_gradient(np.tile(params[0], [Nsi.shape[0],1])) # initialize the hidden state at t = 0
-       
+        h = lax.stop_gradient(np.tile(params[0], [Nsi.shape[0],1])) # initialize the hidden state at t = 0 across the batch
+      
+        # samples one conditional 
         def sample_scan(params, tup,x):
             """ Perform single step update of the network """
             _, (update_W, update_U, update_b), (reset_W, reset_U, reset_b), (
@@ -85,12 +89,11 @@ def GRU(out_dim, W_init=glorot_normal(), b_init=normal()):
             key, subkey = random.split(key)
             
             samples = random.categorical(subkey, logits, axis=1, shape=None) # sampling the conditional
-            samples = one_hot(samples,sm_b.shape[0]) 
+            samples = one_hot(samples,sm_b.shape[0]) # convert to one hot encoded vector 
             log_P_new = np.sum(samples*log_softmax(logits),axis=1)
-            log_P_new = log_P_new + logP 
+            log_P_new = log_P_new + logP # update the value of the logP of the sample 
              
             
-            #print("shape of logP",logP.shape)
             return (key,samples,log_P_new,output),samples
         
         Ns = Nsi.shape[0] 
@@ -103,12 +106,17 @@ def GRU(out_dim, W_init=glorot_normal(), b_init=normal()):
                
         out_new = np.transpose(out_new,[1,0,2])   # reshape to [bsize,Nqubits,loc hilbert space dim]
 
-        return out_new,logP_new,key_new #()    
+        return out_new,logP_new,key_new #()  Returns a sample and its log probability   
 
+    # computes the logP of a batch of configurations in array input
     def apply_fun(params, inputs, **kwargs):
         """ Loop over the time steps of the input sequence """
-        h = lax.stop_gradient(np.tile(params[0], [inputs.shape[0],1]))
-        logP = np.zeros((inputs.shape[0],inputs.shape[2],))  
+
+        h = lax.stop_gradient(np.tile(params[0], [inputs.shape[0],1])) # initikilze hidden state to zeros
+
+        logP = np.zeros((inputs.shape[0],inputs.shape[2],))  # init  logP of configurations
+
+        # forward pass of one RNN cell
         def apply_fun_scan(params, tup, inp):
             """ Perform single step update of the network """
             _, (update_W, update_U, update_b), (reset_W, reset_U, reset_b), (
@@ -192,7 +200,7 @@ start_time = time.time()
 counter = 0 
 bcount = 0 
 
-for epoch in range(2):
+for epoch in range(50):
     ept = onp.random.permutation(data_train)  
     for i in range(num_batches):
         if bcount*batch_size + batch_size>=n_samples:
